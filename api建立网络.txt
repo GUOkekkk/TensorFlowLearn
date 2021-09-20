@@ -1,0 +1,29 @@
+import tensorflow as tf
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+
+(train_image,train_label),(test_image,test_label) = tf.keras.datasets.fashion_mnist.load_data()
+#查看数据类型print(test_label.shape)
+# plt.imshow(train_image[0])
+# plt.show() 查看第一个图片
+#print(test_image[0]) 查看数据 图片用矩阵/数组存储
+train_image = train_image/255
+test_image = test_image/255
+train_label_onehot = tf.keras.utils.to_categorical(train_label)
+test_label_onehot = tf.keras.utils.to_categorical(test_label)
+
+input = tf.keras.Input(shape=(28,28))
+x = tf.keras.layers.Flatten()(input)
+#函数的调用
+x = tf.keras.layers.Dense(32,activation='relu')(x)
+#用函数式api建立网络
+x= tf.keras.layers.Dropout(0.5)(x)
+
+output = tf.keras.layers.Dense(10,activation='softmax')(x)
+
+model = tf.keras.Model(inputs = input , outputs = output)
+
+model.summary()
+
+model.compile(optimizer='adam',loss='sparse_categorical_crossentropy')

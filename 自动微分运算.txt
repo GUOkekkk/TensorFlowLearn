@@ -1,0 +1,36 @@
+import tensorflow as tf
+import numpy as np
+
+v = tf.Variable(0.0)
+#创建变量
+c = tf.constant(1)
+#创建常量
+v.assign(5)
+#变量直接变换
+v.assign_add(1)
+#变量增加
+v.read_value()
+#读取变量
+w = tf.Variable([[1.0]]) #跟踪的是float类型
+with tf.GradientTape(persistent=True) as t:
+#同一次运算只能计算一次微分 t.gradient 计算之后释放
+#想多次运算在tf.GradientTape()添加参数 persistent=True把资源永久记录下来
+    loss = w*w
+#上下文管理器 用梯度磁带记录
+grad = t.gradient(loss,w)
+#哪个函数对哪个变量微分
+
+
+c = tf.constant([[3.0]])
+with tf.GradientTape() as t:
+    t.watch(c)
+    #跟踪常量
+    loss = w*w
+#上下文管理器 用梯度磁带记录
+grad_w = t.gradient(loss,w)
+grad_C = t.gradient(loss,c)
+#哪个函数对哪个变量微分
+
+
+
+

@@ -1,0 +1,31 @@
+import tensorflow as tf
+
+(train_image,train_label),(test_image,test_label) = tf.keras.datasets.fashion_mnist.load_data()
+train_image = train_image/255
+test_image = test_image/255
+
+ds_train_image = tf.data.Dataset.from_tensor_slices(train_image)
+ds_train_label = tf.data.Dataset.from_tensor_slices(train_label)
+
+ds_train = tf.data.Dataset.zip((ds_train_image,ds_train_label))
+#用zip的方法合并元素
+ds_train = ds_train.shuffle(100).repeat().batch(10)
+
+ds_test = tf.data.Dataset.from_tensor_slices((test_image,test_label))
+
+ds_test = ds_test.batch(64)
+
+model = tf.keras.Sequential([
+    tf.keras.layers.Flatten(input_shape = (28,28)),
+    tf.keras.layers.Dense(10, activation = 'relu'),
+    tf.keras.layers.Dense(10,activation = 'softmax' )
+])
+
+model.compile(optimizer='adam',loss='sparse_categorical_crossentropy',metrics=['acc'])
+steps_per_epochs = train_image.shape[0]//10
+#除以batch值 这个数必须为整数
+model.fit(ds_train,
+          epochs = 5,
+          steps_per_epoch = steps_per_epochs,
+          validation_data=ds_test,
+          validation_steps=10000//64)

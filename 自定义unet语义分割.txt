@@ -1,0 +1,221 @@
+import tensorflow as tf
+import numpy as np
+import os
+import matplotlib.pyplot as plt
+import glob
+
+img = glob.glob('./data_set/leftImg8bit/train/*/*.png')
+label = glob.glob('./data_set/gtFine/train/*/*_gtFine_labelIds.png')
+img_val = glob.glob('./data_set/leftImg8bit/val/*/*.png')
+label_val = glob.glob('./data_set/gtFine/val/*/*_gtFine_labelIds.png')
+
+dataset_train = tf.data.Dataset.from_tensor_slices((img, label))
+dataset_val = tf.data.Dataset.from_tensor_slices((img_val, label_val))
+
+
+def read_png(path):
+    img = tf.io.read_file(path)
+    img = tf.image.decode_png(img, channels=3)
+    return img
+
+
+def read_png_label(path):
+    img = tf.io.read_file(path)
+    img = tf.image.decode_png(img, channels=1)
+    return img
+
+
+# 数据增强
+if tf.random.uniform() > 0.5:
+    img = tf.image.flip_left_right(img)
+# 随机左右反转 记得反转语义分割
+concat_img = tf.concat([img, label], axis=-1)
+
+
+# 先resize再cut
+# 随机裁剪 两种图片裁剪同一个地方 把图片合并在一起 两层
+# concat要求shape一致
+
+def crop_img(img, mask):
+    concat_img = tf.concat([img, mask], axis=-1)
+    concat_img = tf.image.resize(concat_img, (280, 280),
+                                 method=tf.image.ResizeMethod.NEAREST_NEIGHBOR)
+    crop_img = tf.image.random_crop(concat_img, [256, 256, 4])
+    return crop_img[:, :, :3], crop_img[:, :, 3:]
+# 需要这个维度
+
+def normal(img, mask):
+    img = tf.cast(img, tf.float32)/127.5-1
+    mask = tf.cast(mask, tf.int32)
+    return img, mask
+
+def load_image_train(img_path, mask_path):
+    img = read_png(img_path)
+    mask = read_png_label(mask_path)
+    img, mask = crop_img(img, mask)
+    if tf.random.uniform(()) > 0.5:
+        img = tf.image.flip_left_right(img)
+        mask = tf.image.flip_left_right(mask)
+
+    img, mask = normal(img,mask)
+    return img,mask
+
+def load_image_test(img_path, mask_path):
+    img = read_png(img_path)
+    mask = read_png_label(mask_path)
+    img = tf.image.resize(img, (256,256))
+    mask = tf.image.resize(mask,(256,256))
+
+    img, mask = normal(img,mask)
+    return img,mask
+
+BATCH_SIZE = 32
+BUFFER_SIZE = 300
+train_count = len(dataset_train)
+val_count = len(img_val)
+step_per_epoch = train_count//BATCH_SIZE
+val_step = val_count//BATCH_SIZE
+auto = tf.data.experimental.AUTOTUNE
+
+index = np.random.permutation(len(img))
+img = np.array(img)[index]
+
+dataset_train = dataset_train.map(load_image_train, num_parallel_calls=auto)
+dataset_val = dataset_val.map(load_image_test, num_parallel_calls=auto)
+
+for i,m in dataset_train.take(1):
+    plt.subplot(1,2,1)
+    plt.imshow((i.numpy()+1)/2)
+    plt.subplot(1,2,2)
+    plt.imshow(np.squeeze(m.numpy()))
+
+dataset_train = dataset_train.cache().repeat().shuffle(BUFFER_SIZE).batch(BATCH_SIZE).prefetch(auto)
+dataset_val = dataset_val.cache().batch(BATCH_SIZE)
+
+def create_model():
+    inputs = tf.keras.layers.Input(shape = (256,256,3))
+    x = tf.keras.layers.Conv2D(64, 3, padding='same', activation='relu')(inputs)
+    x = tf.keras.layers.BatchNormalization()(x)
+    # 提高效率
+    x = tf.keras.layers.Conv2D(64, 3, padding='same', activation='relu')(x)
+    x = tf.keras.layers.BatchNormalization()(x)
+
+    x1 = tf.keras.layers.MaxPooling2D(padding='same')(x)
+
+    x1 = tf.keras.layers.Conv2D(128, 3, padding='same', activation='relu')(x1)
+    x1 = tf.keras.layers.BatchNormalization()(x1)
+    # 提高效率
+    x1 = tf.keras.layers.Conv2D(128, 3, padding='same', activation='relu')(x1)
+    x1 = tf.keras.layers.BatchNormalization()(x1)
+
+    x2 = tf.keras.layers.MaxPooling2D(padding='same')(x1)
+
+    x2 = tf.keras.layers.Conv2D(256, 3, padding='same', activation='relu')(x2)
+    x2 = tf.keras.layers.BatchNormalization()(x2)
+    # 提高效率
+    x2 = tf.keras.layers.Conv2D(256, 3, padding='same', activation='relu')(x2)
+    x2 = tf.keras.layers.BatchNormalization()(x2)
+
+    x3 = tf.keras.layers.MaxPooling2D(padding='same')(x2)
+
+    x3 = tf.keras.layers.Conv2D(512, 3, padding='same', activation='relu')(x3)
+    x3 = tf.keras.layers.BatchNormalization()(x3)
+    # 提高效率
+    x3 = tf.keras.layers.Conv2D(512, 3, padding='same', activation='relu')(x3)
+    x3 = tf.keras.layers.BatchNormalization()(x3)
+
+    x4 = tf.keras.layers.MaxPooling2D(padding='same')(x3)
+
+    x4 = tf.keras.layers.Conv2D(1024, 3, padding='same', activation='relu')(x4)
+    x4 = tf.keras.layers.BatchNormalization()(x4)
+    # 提高效率
+    x4 = tf.keras.layers.Conv2D(1024, 3, padding='same', activation='relu')(x4)
+    x4 = tf.keras.layers.BatchNormalization()(x4)
+
+    x5 = tf.keras.layers.Conv2DTranspose(512, 2, strides=2,
+                                         padding='same', activation='relu')(x4)
+    x5 = tf.keras.layers.BatchNormalization()(x5)
+    x6 = tf.concat([x3, x5], axis=-1)
+
+    x6 = tf.keras.layers.Conv2D(512, 3, padding='same', activation='relu')(x6)
+    x6 = tf.keras.layers.BatchNormalization()(x6)
+    # 提高效率
+    x6 = tf.keras.layers.Conv2D(256, 3, padding='same', activation='relu')(x6)
+    x6 = tf.keras.layers.BatchNormalization()(x6)
+
+    x7 = tf.keras.layers.Conv2DTranspose(256, 2, strides=2,
+                                         padding='same', activation='relu')(x6)
+    x7 = tf.keras.layers.BatchNormalization()(x7)
+    x8 = tf.concat([x2, x7], axis=-1)
+
+    x8 = tf.keras.layers.Conv2D(256, 3, padding='same', activation='relu')(x8)
+    x8 = tf.keras.layers.BatchNormalization()(x8)
+    # 提高效率
+    x8 = tf.keras.layers.Conv2D(256, 3, padding='same', activation='relu')(x8)
+    x8 = tf.keras.layers.BatchNormalization()(x8)
+
+    x9 = tf.keras.layers.Conv2DTranspose(128, 2, strides=2,
+                                         padding='same', activation='relu')(x8)
+    x9 = tf.keras.layers.BatchNormalization()(x9)
+    x10 = tf.concat([x1, x9], axis=-1)
+
+    x10 = tf.keras.layers.Conv2D(128, 3, padding='same', activation='relu')(x10)
+    x10 = tf.keras.layers.BatchNormalization()(x10)
+    # 提高效率
+    x10 = tf.keras.layers.Conv2D(128, 3, padding='same', activation='relu')(x10)
+    x10 = tf.keras.layers.BatchNormalization()(x10)
+
+    x11 = tf.keras.layers.Conv2DTranspose(64, 2, strides=2,
+                                         padding='same', activation='relu')(x10)
+    x11 = tf.keras.layers.BatchNormalization()(x11)
+    x12 = tf.keras.layers.Concatenate()([x, x11], axis=-1)
+
+    x12 = tf.keras.layers.Conv2D(64, 3, padding='same', activation='relu')(x12)
+    x12 = tf.keras.layers.BatchNormalization()(x12)
+    # 提高效率
+    x12 = tf.keras.layers.Conv2D(64, 3, padding='same', activation='relu')(x12)
+    x12 = tf.keras.layers.BatchNormalization()(x12)
+
+    output = tf.keras.layers.Conv2D(34, 1, padding='same', activation='softmax')(x12)
+    return tf.keras.Model(inputs=inputs, outputs=output)
+
+model = create_model()
+print(model.summary())
+tf.keras.utils.plot_model(model)
+# 画出模型
+# MeanIoU只适用于独热编码 这里要转换一下
+class MeanIoU(tf.keras.metrics.MeanIoU):
+    def __call__(self,y_true,y_pred,sample_weight=None):
+        y_pred = tf.argmax(y_pred,axis=-1)
+        return super().__call__(y_true,y_pred,sample_weight=sample_weight)
+
+model.compile(
+    optimizer='adam',
+    loss='sparse_categorical_crossentropy',
+    metrics=['acc', tf.keras.metrics.MeanIoU(num_classes=34)]
+)
+
+EPOCHS = 60
+history = model.fit(
+    dataset_train,
+    epochs=EPOCHS,
+    step_per_epoch = train_count//BATCH_SIZE,
+    validation_steps = val_count//BATCH_SIZE,
+    validation_data=dataset_val
+)
+# 绘制
+num = 3
+for image,mask in dataset_val.take(1):
+    pred_mask = model.predict(image)
+    pred_mask = tf.argmax(pred_mask,axis=-1)
+    pred_mask = pred_mask[..., tf.newaxis]
+
+    plt.figure(figsize=(10,10))
+    for  i in range(num):
+        plt.subplot(num, 3, i*num+1)
+        plt.imshow(tf.keras.preprocessing.image.array_to_img(image[i]))
+        plt.subplot(num, 3, i*num+2)
+        plt.imshow(tf.keras.preprocessing.image.array_to_img(mask[i]))
+        plt.subplot(num, 3, i*num+3)
+        plt.imshow(tf.keras.preprocessing.image.array_to_img(pred_mask[i]))
+

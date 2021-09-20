@@ -1,0 +1,141 @@
+import tensorflow as tf
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import datetime
+
+data = pd.read_csv('./data_set/PRSA_data_2010.1.1-2014.12.31.csv')
+# print(data['pm2.5'].isna().sum()) 数据有空的
+data = data.iloc[24:].fillna(method='ffill')
+# 填充数据
+# 合并时间
+data['time'] = data.apply(
+    lambda x:datetime.datetime(year=x['year'],
+                               month=x['month'],
+                               day=x['day'],
+                               hour=x['hour']),
+    axis = 1
+)
+# print(data.head())
+data.drop(columns=['year', 'month', 'day', 'hour', 'No'], inplace=True)
+data = data.set_index('time')
+# print(data.cbwd.unique())
+data = data.join(pd.get_dummies(data.cbwd))
+data.drop(columns=['cbwd'], inplace=True)
+# 对文字进行独热编码
+# 画图展示
+# plt.show(data['pm2.5'][-1000:].plot())
+seq_lenth = 5*24
+# 观测长度
+delay = 24
+# 预测一天
+# 直接读取数据有太多冗余 建议使用生成器
+data_batch = []
+for i in range(len(data)-seq_lenth-delay):
+    data_batch.append(data.iloc[i:i+seq_lenth+delay])
+data_batch = np.array([df.values for df in data_batch])
+# print(data_batch.shape)
+np.random.shuffle(data_batch)
+# print(data_batch)
+x = data_batch[:, :5*24, :]
+y = data_batch[:, :1, 0]
+split_count = int(data_batch.shape[0]*0.8)
+# 28分割
+train_data = x[:split_count]
+train_label = y[:split_count]
+test_data = x[split_count:]
+test_label = y[split_count:]
+# 数据的预处理是很重要的
+mean = train_data.mean(axis=0)
+std = train_data.std(axis=0)
+train_data = (train_data-mean)/std
+test_data = (test_data-mean)/std
+BATCH_SIZE = 128
+# 全连接网络 捕捉不到时间的趋势
+# model = tf.keras.Sequential()
+# # model.add(tf.keras.layers.Flatten(input_shape=(train_data.shape[1:])))
+# # # 切片并且扁平化
+# # model.add(tf.keras.layers.Dense(32, activation='relu'))
+# # model.add(tf.keras.layers.Dense(1))
+# # # 不用激活 是一个regression
+# # model.compile(
+# #     optimizer='adam',
+# #     loss=tf.keras.losses.mse,
+# #     metrics=['mae']
+# #     # 平均绝对误差
+# # )
+# # history = model.fit(
+# #     train_data, train_label,
+# #     batch_size=BATCH_SIZE,
+# #     epochs=50,
+# #     validation_data=(test_data, test_label)
+# # )
+
+# LSTM网络
+model = tf.keras.Sequential()
+model.add(tf.keras.layers.LSTM(
+    32, input_shape = (120,11),
+))
+# 内循环结构的 在最后的output上做dense就可以 这个output已经包含了所有的前面的结果
+model.add(tf.keras.layers.Dense(1))
+model.compile(
+    optimizer='adam',
+    loss='mse',
+    metrics=['mae']
+)
+history = model.fit(
+     train_data, train_label,
+     batch_size=BATCH_SIZE,
+     epochs=50,
+     validation_data=(test_data, test_label))
+
+
+
+# # LSTM的优化 可以增加多层的LSTM
+# model = tf.keras.Sequential()
+# model.add(tf.keras.layers.LSTM(32, input_shape=(120,11), return_sequences=True))
+# # return_sequences 叠加多层一定要为True
+# model.add(tf.keras.layers.LSTM(32,  return_sequences=True))
+# model.add(tf.keras.layers.LSTM(32,  return_sequences=True))
+# model.add(tf.keras.layers.LSTM(32))
+# # 最后的不需要return_sequence
+# model.add(tf.keras.layers.Dense(1))
+# # 通过回调函数 降低学习速率
+# lr_reduce = tf.keras.callbacks.ReduceLROnPlateau('val_loss', patience=3, factor=0.5,
+#                                      min_lr=0.00001)
+# # 监控val_loss 如果在3个epoch里没有减低 会降低*0.5的learning rate
+# model.compile(
+#     optimizer='adam',
+#     loss='mse',
+#     metrics=['mae']
+# )
+# history = model.fit(
+#      train_data, train_label,
+#      batch_size=BATCH_SIZE,
+#      epochs=50,
+#      callbacks=[lr_reduce],
+#      validation_data=(test_data, test_label))
+model.save('pm2.5.h5')
+# 模型保存
+model.evaluate(test_data, test_label, verbose=0)
+# verbose控制显示 0就是不打印进度条
+pre_test = model.predict(test_data)
+pre_test[:5]
+# above预测所有数据
+data_test = data[-120:]
+data_test = data_test.iloc[:, 5:]
+data_test = pd.get_dummies(data_test.cbwd)
+data_test.drop(data_test['cbwd'], axis=1, inplace=True)
+# data_test.reindex(columns=[])重新设置index
+# 注意要使用训练数据的mean std
+data_test = (data_test-mean)/std
+# 归一化
+data_test = data_test.to_numpy()
+data_test = np.expand_dims(data_test, axis=0)
+# 扩展维度 便于输入
+model.predict(data_test)
+
+
+
+
+

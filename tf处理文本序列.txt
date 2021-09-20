@@ -1,0 +1,40 @@
+import tensorflow as tf
+from tensorflow import keras
+from tensorflow.keras import layers
+
+#后两个import没有起作用
+#数据内置在keras的dataset 电影评论数据
+
+data = tf.keras.datasets.imdb
+(x_train,y_train),(x_test,y_test) = data.load_data(num_words=10000)
+#只考虑前10000个单词 之后的不予以编码 动态编码？
+#数据类型是一个整数序列 用一个整数代替单词
+# data.get_word_index() 得到单词字典吧
+#利用全连接网络分类
+#k-hot 编码 独热编码
+#把文本训练成密集向量是最好的处理文本的方法 keras有对应的层
+#数据长度不相同 进行填充或删减
+x_train = tf.keras.preprocessing.sequence.pad_sequences(x_train,300)
+x_test = tf.keras.preprocessing.sequence.pad_sequences(x_test,300)
+#填充到300
+#test = 'I am ironman'
+#dict_1 = dict((word , test.split().index(word)) for word in test.split())
+#元组表达式！！！
+#print(dict_1)
+
+model = tf.keras.models.Sequential()
+model.add(layers.Embedding(10000,50,input_length=300))
+#把序列映射成一个密集向量 要求输入输出的维度 第一次输入要求 输入的长度
+#映射成为长度为50的向量
+model.add(layers.Flatten())
+#扁平化
+#model.add(layers.GlobalAveragePooling1D())
+#用这个方法降低过拟合 用均值代替向量
+model.add(layers.Dense(128,activation='relu'))
+model.add(layers.Dense(1,activation='sigmoid'))
+#model.summary()
+#正面或负面评价 二分类问题
+model.compile(optimizer=tf.keras.optimizers.Adam(lr=0.001),
+              loss=tf.keras.losses.binary_crossentropy ,
+              metrics =['acc'] )
+model.fit(x_train,y_train,epochs=15,batch_size=256,validation_data=(x_test,y_test))

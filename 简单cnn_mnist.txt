@@ -1,0 +1,54 @@
+import tensorflow as tf
+import matplotlib.pyplot as plt
+import numpy as np
+
+(train_image,train_label),(test_image,test_label) = tf.keras.datasets.mnist.load_data()
+
+#卷积神经网络输入的图片集都有四个维度 个数 长 宽 通道数
+
+train_image = np.expand_dims(train_image,-1)
+test_image = np.expand_dims(test_image,-1)
+
+#扩展维度 初始值为1？ 后面这个参数是扩维的位置
+
+model = tf.keras.Sequential()
+model.add(
+    tf.keras.layers.Conv2D(64,#卷积核个数 即通道数变化
+                           (3,3),#卷积核大小
+                           input_shape=(28,28,1),#除去第0个的数据
+                          activation='relu'
+                           )#默认使用vaild的padding输出的数据图片变小一点a-b+1 如果使用same则大小不变
+        )
+model.add(tf.keras.layers.Conv2D(64,(3,3),activation='relu'))
+model.add(tf.keras.layers.MaxPooling2D())#默认2*2
+model.add(tf.keras.layers.Dropout(0.5))
+
+model.add(tf.keras.layers.Conv2D(128,(3,3),activation='relu'))#2的n次方递增拟合能力强
+model.add(tf.keras.layers.Conv2D(128,(3,3),activation='relu'))
+model.add(tf.keras.layers.MaxPooling2D())
+model.add(tf.keras.layers.Dropout(0.5))
+
+model.add(tf.keras.layers.Conv2D(256,(3,3),activation='relu'))
+model.add(tf.keras.layers.Conv2D(256,(3,3),activation='relu'))
+model.add(tf.keras.layers.Dropout(0.5))
+
+model.add(tf.keras.layers.GlobalAveragePooling2D())
+#全局平均池化全连接 所有维度上做一个平均 得到一个二维的数据 个数 通道数
+#就好像整个图片取了一个平均
+#model.add(tf.keras.layers.Flatten()) 扁平化全连接
+model.add(tf.keras.layers.Dense(256,activation='relu'))
+model.add(tf.keras.layers.Dense(10,activation='softmax'))
+#model.output_shape查看输出的类型
+# model.summary()
+model.compile(optimizer='adam',
+              loss='sparse_categorical_crossentropy',
+              metrics=['acc'])
+
+history = model.fit(train_image,train_label,epochs=30,validation_data=(test_image,test_label))
+
+plt.plot(history.epoch,history.history.get('acc'),label = 'acc')
+plt.plot(history.epoch,history.history.get('val_acc'),label = 'val_acc')
+#在测试数据上效果不好 有一些过拟合
+#在model里添加隐藏层或隐藏单元数来提高模型能力
+#在model里添加dropout层来抑制过拟合
+

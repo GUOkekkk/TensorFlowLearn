@@ -1,0 +1,23 @@
+import tensorflow as tf
+import pandas as pd
+import matplotlib.pyplot as plt
+
+data = pd.read_csv('credit-a.csv',header=None)
+#header = None 添加数字表头 第15列为输出1和-1 二分类问题
+x = data.iloc[:,:-1]
+y = data.iloc[:,-1].replace(-1.0)
+#替换-1为0
+model = tf.keras.Sequential(
+    [tf.keras.layers.Dense(4,input_shape=(15,),activation='relu'),
+     tf.keras.layers.Dense(4,activation='relu'),
+     tf.keras.layers.Dense(1,activation='sigmoid')
+     ]
+)
+model.compile(
+    optimizer='adam',
+    loss='binary_crossentropy',
+    metrics=['acc']#测量每次迭代的accuracy或者loss的list
+)
+history = model.fit(x,y,epochs=100)
+plt.plot(history.epoch,history.history.get('acc'))
+plt.show()

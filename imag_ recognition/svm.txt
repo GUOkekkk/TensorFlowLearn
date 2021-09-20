@@ -1,0 +1,60 @@
+import numpy as np
+from sklearn import datasets
+from sklearn.model_selection import cross_val_score
+from sklearn import svm
+from sklearn.svm import SVC
+from sklearn.datasets import load_iris
+import matplotlib.pyplot as plt
+#但是浮点数不支持range函数，自己定义一个类似的
+def floatrange(start,stop,steps):
+    return [start+float(i)*(stop-start)/(float(steps)-1) for i in range(steps)]
+iris=load_iris()
+X=iris.data
+y=iris.target
+C_range=floatrange(0.1,1.0,2)
+C_scores=[]
+for C in C_range:
+    clf=svm.SVC(C,kernel='rbf',gamma='auto',decision_function_shape='ovr')
+    scores=cross_val_score(clf,X,y,cv=10,scoring='accuracy')
+    C_scores.append(scores.mean())
+plt.plot(C_range,C_scores)
+plt.xlabel('C')
+plt.ylabel('accuracy')
+plt.show()
+
+
+import numpy as np
+from sklearn import datasets
+from sklearn.model_selection import cross_val_score
+from sklearn import svm
+from sklearn.svm import SVC
+from sklearn.datasets import load_iris
+import matplotlib.pyplot as plt
+
+iris=load_iris()
+X=iris.data
+y=iris.target
+clf=svm.SVC(C=0.8,kernel='rbf',gamma='auto',decision_function_shape='ovr')
+clf.fit(X,y)
+scores=cross_val_score(clf,X,y,cv=10,scoring='accuracy')
+print(clf.score(X,y))
+print(clf.predict(X))
+print(y)
+
+import numpy as np
+from sklearn.model_selection import cross_val_score
+from sklearn import svm
+from sklearn.datasets import load_iris
+from sklearn.externals import joblib
+import matplotlib.pyplot as plt
+path='test.txt'
+Z=np.loadtxt(path,dtype=float,delimiter=',')
+iris=load_iris()
+X=iris.data
+y=iris.target
+clf=svm.SVC(C=0.8,kernel='rbf',gamma='auto',decision_function_shape='ovr')
+clf.fit(X,y)
+scores=cross_val_score(clf,X,y,cv=10,scoring='accuracy')
+joblib.dump(clf,'svm classify',compress=9)
+clf3=joblib.load('svm classify')
+print(clf3.predict(Z[0:7]))

@@ -1,0 +1,22 @@
+import tensorflow as tf
+import pandas as pd
+import matplotlib.pyplot as plt
+data = pd.read_csv('Advertising.csv')
+#data.head 查看前几个数据
+x = data.iloc[:,1:-1]
+#除去第一列和最后一列
+y = data.iloc[:,-1]
+model = tf.keras.Sequential(
+    [tf.keras.layers.Dense(10,input_shape=(3,),activation='relu'),
+     #定义隐藏层的单元数为10,input_shape(输入的变量数，),activation激活函数
+     tf.keras.layers.Dense(1)
+     #定义输出层 输入10个输出一个
+     ]
+)
+model.compile(optimizer='adam',
+              loss='mse')
+model.fit(x,y,epochs=100)
+test = data.iloc[:10,1:-1]
+#前10个
+a = model.predict(test)
+print(a)

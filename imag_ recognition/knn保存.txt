@@ -1,0 +1,35 @@
+import numpy as np
+from sklearn import datasets
+from sklearn.model_selection import cross_val_score
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.datasets import load_iris
+iris=load_iris()
+X=iris.data
+y=iris.target
+knn=KNeighborsClassifier(n_neighbors=5)
+knn.fit(X,y)
+
+from sklearn.externals import joblib
+joblib.dump(knn,'save/knn.pkl')
+knn101=joblib.load('save/knn.pkl')
+print(knn101.predict(X[0:1]))
+
+
+import numpy as np
+from sklearn import datasets
+from sklearn.model_selection import cross_val_score
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.datasets import load_iris
+iris=load_iris()
+X=iris.data
+y=iris.target
+knn=KNeighborsClassifier(n_neighbors=5)
+knn.fit(X,y)
+
+from sklearn.externals import joblib
+joblib.dump(knn,'save/knn.pkl')
+knn101=joblib.load('save/knn.pkl')
+
+arr=input("input:")
+num=[int(n) for n in arr.split()]
+print(knn101.predict(x))

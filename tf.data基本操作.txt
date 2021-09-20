@@ -1,0 +1,44 @@
+import tensorflow as tf
+import pandas as pd
+import matplotlib.pyplot as plt
+
+dataset = tf.data.Dataset.from_tensor_slices([1,2,3,4,5])
+# for i in dataset:
+#     print(i.numpy()) #类型已经转换为tf.tensor类型
+#     #转换成numpy类型
+
+# dataset = tf.data.Dataset.from_tensor_slices([[1,2],[3,4],[5,6]])
+# #每个元素的类型应该相同 不可以[5,6,7] 要放在一个列表里面
+# print(dataset)
+#
+# dataset_dic = tf.data.Dataset.from_tensor_slices({
+#     'a':[1,2,3,4],
+#     'b':[6,7,8,9]
+# })
+# print(dataset_dic)
+# #把这个字典切开
+# for i in dataset_dic:
+#     print(i['a'])
+#     print(i.keys())
+
+#for i in dataset.take(3):#取出元素
+#    print(i.numpy())
+#next(iter(dataset.take(1)))
+#取出一个元素
+
+#对数据乱序 不让神经网络记忆数据间的关系
+#dataset = dataset.shuffle(5)
+#shuffle只乱序一次
+
+#dataset = dataset.repeat(count = 3)
+#repeat重复操作 参数为循环次数
+
+#dataset = dataset.batch(2)
+#batch分批次输出 参数为一次输出的元素数
+#for i in dataset:
+#   print(i.numpy())
+
+dataset = dataset.map(tf.square)
+for i in dataset:
+    print(i.numpy())
+#用map方法直接把函数作用在数据上

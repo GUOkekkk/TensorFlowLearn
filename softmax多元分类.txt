@@ -1,0 +1,22 @@
+import tensorflow as tf
+import pandas as pd
+import matplotlib.pyplot as plt
+
+(train_image,train_label),(test_image,test_label) = tf.keras.datasets.fashion_mnist.load_data()
+#查看数据类型print(test_label.shape)
+# plt.imshow(train_image[0])
+# plt.show() 查看第一个图片
+#print(test_image[0]) 查看数据 图片用矩阵/数组存储
+train_image = train_image/255
+test_image = test_image/255
+#归一化处理
+model = tf.keras.Sequential()
+model.add(tf.keras.layers.Flatten(input_shape=(28,28)))
+#这里不能用Dense运算 dense是把一个一维的张量映射到一维的 用flatten把数据从二维扁平化
+model.add(tf.keras.layers.Dense(128,activation='relu'))
+model.add(tf.keras.layers.Dense(10,activation='softmax'))
+#用softmax来做多分类
+model.compile(optimizer='adam',loss='sparse_categorical_crossentropy',metrics=['acc'])
+model.fit(train_image,train_label,epochs=5)
+
+model.evaluate(test_image,test_label)

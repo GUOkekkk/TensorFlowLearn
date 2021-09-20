@@ -1,0 +1,16 @@
+import tensorflow as tf
+import pandas as pd
+import matplotlib.pyplot as plt
+data = pd.read_csv('Income1.csv')
+x = data.Education
+y = data.Income
+model = tf.keras.Sequential()
+model.add(tf.keras.layers.Dense(1,input_shape=(1,)))
+#在模型中添加层 units输出数据维度 input_shape输入数据维度
+#model.summary()
+#查看模型 output shape的none表示每一批输入的样本的个数
+model.compile(optimizer='rmsprop',
+              loss='mse')
+#mse最小二乘法 adam随机梯度下降法
+model.fit(x,y,epochs=5000)
+print(model.predict(pd.Series([200])))

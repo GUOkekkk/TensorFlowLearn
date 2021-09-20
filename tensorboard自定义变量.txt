@@ -1,0 +1,65 @@
+import tensorflow as tf
+import os
+import datetime
+
+(train_image,train_labels),(test_image,test_labels) = tf.keras.datasets.mnist.load_data()
+
+def CreatDataset(images,labels):
+     images = tf.expand_dims(images,-1)
+     images = tf.cast(images/255,tf.float32)
+     labels = tf.cast(labels,tf.float64)
+     dataset = tf.data.Dataset.from_tensor_slices((images,labels))
+     return dataset
+
+dataset = CreatDataset(train_image,train_labels)
+test_dataset =CreatDataset(test_image,test_labels)
+
+dataset = dataset.repeat().shuffle(60000).batch(128)
+#自定义训练要填一个repeat的参数
+test_dataset =test_dataset.repeat().batch(128)
+
+model = tf.keras.Sequential(
+    [
+        tf.keras.layers.Conv2D(16,[3,3],activation='relu',input_shape=(None,None,1)),
+        tf.keras.layers.Conv2D(32,[3,3],activation='relu'),
+        tf.keras.layers.GlobalMaxPool2D(),
+        tf.keras.layers.Dense(10,activation='softmax')
+    ]
+)
+
+model.compile(
+    optimizer='adam',
+    loss='sparse_categorical_crossentropy',
+    metrics=['accuracy']
+)
+log_dir = os.path.join('logs',datetime.datetime.now().strftime('%Y%m%d-%H%M%S'))
+#添加时间戳
+
+tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir,histogram_freq=1)
+#histogram_freq记录直方图的频率
+
+file_writer = tf.summary.create_file_writer(log_dir+'/lr')
+#文件编写器
+file_writer.set_as_default()
+#设置为默认编写器
+
+def lr_sche(epoch):#根据epoch改变learning rate
+    lr = 0.2
+    if epoch>5:
+        lr = 0.02
+    if epoch>10:
+        lr = 0.01
+    tf.summary.scalar('learning_rate',data=lr,step=epoch)
+    #记录标量值
+    return lr
+
+lr_callback = tf.keras.callbacks.LearningRateScheduler(lr_sche)
+#创建回调函数
+model.fit(
+    dataset,
+    epochs=15,
+    steps_per_epoch=60000//128,
+    validation_data=test_dataset,
+    validation_steps=10000//128,
+    callbacks=[tensorboard_callback,lr_callback]
+)

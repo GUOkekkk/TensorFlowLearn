@@ -1,0 +1,124 @@
+import tensorflow as tf
+import os
+import datetime
+import matplotlib.pyplot as plt
+
+(train_image,train_labels),  (test_image , test_labels) = tf.keras.datasets.mnist.load_data()
+#   _ 为占位符 不用测试集
+#plt.imshow(train_image[5656])
+#plt.show() 查看图片
+def CreatDataset(images,labels):
+    images = tf.expand_dims(images,-1)
+    images = tf.cast(images/255,tf.float32)
+    labels = tf.cast(labels,tf.float64)
+    dataset = tf.data.Dataset.from_tensor_slices((images,labels))
+
+    return dataset
+
+dataset = CreatDataset(train_image,train_labels)
+test_dataset =CreatDataset(test_image,test_labels)
+
+dataset = dataset.shuffle(10000).batch(32).repeat(1)
+#乱洗 分批次 重复次数 默认为1
+test_dataset = test_dataset.batch(32).repeat(1)
+#不用乱序
+model = tf.keras.Sequential(
+    [
+        tf.keras.layers.Conv2D(16,[3,3],activation='relu',input_shape=(28,28,1)),#卷积层第一层
+        tf.keras.layers.Conv2D(32,[3,3],activation='relu'),
+        tf.keras.layers.GlobalAveragePooling2D(),
+        tf.keras.layers.Dense(10)
+    ]
+)
+
+#自定义训练不需要编译
+
+#model.trainable_variables
+#查看可训练参数
+
+optimizer = tf.keras.optimizers.Adam()
+
+loss_func = tf.keras.losses.SparseCategoricalCrossentropy(from_logits=True)
+#大写的是要调用的 小写的要添加参数 from_logits=True前面输出层是否激活 没激活是True
+
+features , labels = next(iter(dataset))
+#iter 迭代器 取出一个批次
+
+predictions = model(features)
+#可以预测但没有训练
+
+train_loss = tf.keras.metrics.Mean('train_loss')
+train_accuracy = tf.keras.metrics.SparseCategoricalAccuracy('train_accuracy')
+test_loss = tf.keras.metrics.Mean('test_loss')
+test_accuracy = tf.keras.metrics.SparseCategoricalAccuracy('test_accuracy')
+
+def loss(model , x , y):
+    y_predict = model(x)
+    return loss_func(y,y_predict)
+#返回损失值
+
+def train_step(model , images , labels):   #单步训练
+    with tf.GradientTape(persistent=True) as t:
+        pred = model(images)
+        loss_step = loss_func(labels,pred)
+    grads = t.gradient(loss_step , model.trainable_variables)
+    optimizer.apply_gradients(zip(grads,model.trainable_variables))
+    train_loss(loss_step)
+    train_accuracy(labels,pred)
+    #优化器直接输入梯度和需要改变的参数 用zip方法打包
+
+def test_step(model,images,labels):
+    pred = model(images)
+    loss_step = loss_func(labels,pred)
+    test_loss(loss_step)
+    test_accuracy(labels,pred)
+
+current_time = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+
+train_log_dir = 'logs/gradient_tape'+current_time+'/train'
+test_log_dir = 'logs/gradient_tape'+current_time+'/test'
+
+train_writer = tf.summary.create_file_writer(train_log_dir)
+test_writer = tf.summary.create_file_writer(test_log_dir)
+
+def train():
+    for epoch in range(10):
+        for (batch , (images,labels)) in enumerate(dataset):
+            #从数据集中迭代出来
+            train_step(model,images,labels)
+        with train_writer.as_default():
+            tf.summary.scalar('loss',train_loss.result(),step=epoch)#收集标量值
+            tf.summary.scalar('acc', train_accuracy.result(), step=epoch)
+        print("Epoch{} is finshed".format(epoch))
+        print("Epoch{} loss is {} , accuracy is {}".format(epoch,
+                                                           train_loss.result().numpy(),
+                                                           train_accuracy.result()))
+        for (batch , (images,labels)) in enumerate(test_dataset):
+            test_step(model,images,labels)
+        with test_writer.as_default():
+            tf.summary.scalar('loss',test_loss.result(),step=epoch)
+            tf.summary.scalar('acc', test_accuracy.result(), step=epoch)
+            #与训练集取一个名字便于图像对比
+        print("Epoch{} test_loss is {} , test_accuracy is {}".format(epoch,
+                                                           test_loss.result().numpy(),
+                                                           test_accuracy.result()))
+
+        train_loss.reset_states()
+        train_accuracy.reset_states()
+        test_loss.reset_states()
+        test_accuracy.reset_states()
+
+
+train()
+#tf.keras.metrics计算模块
+#m = tf.keras.metrics.Mean('acc')#计算均值
+# m(10)
+# m(20)
+# m.result().numpy()用法
+# m([20,40])
+# print(m.result().numpy())
+#m.reset_states()重置模块的状态
+
+#a = tf.keras.metrics.SparseCategoricalAccuracy('acc')
+#acc = a(labels,model(features))#自动选择最大值
+

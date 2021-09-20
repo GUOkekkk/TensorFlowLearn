@@ -1,0 +1,10 @@
+def CreatDataset(images,labels):
+    images = tf.expand_dims(images,-1)
+     images = tf.cast(images/255,tf.float32)
+     labels = tf.cast(labels,tf.float64)
+     dataset = tf.data.Dataset.from_tensor_slices((images,labels))
+
+     return dataset
+
+dataset = CreatDataset(train_image,train_labels)
+test_dataset =CreatDataset(test_image,test_labels)

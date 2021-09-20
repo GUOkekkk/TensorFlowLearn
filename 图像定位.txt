@@ -1,0 +1,165 @@
+import tensorflow as tf
+import matplotlib.pyplot as plt
+import lxml.etree as etree
+# 解析网页
+import numpy as np
+import glob
+from matplotlib.patches import Rectangle
+
+# img = tf.io.read_file('./data_set/location/images/Abyssinian_1.jpg')
+# img = tf.image.decode_jpeg(img)
+# # 要对图像解码
+# img = tf.image.resize(img,[224,224])
+# # 标准化
+# img = img/255
+#
+# xml = open('./data_set/location/annotations/xmls/Abyssinian_1.xml').read()
+# select = etree.HTML(xml)
+# width = int(select.xpath('//size/width/text()')[0])
+# height = int(select.xpath('//size/height/text()')[0])
+# xmin = int(select.xpath('//bndbox/xmin/text()')[0])
+# xmax = int(select.xpath('//bndbox/xmax/text()')[0])
+# ymin = int(select.xpath('//bndbox/ymin/text()')[0])
+# ymax = int(select.xpath('//bndbox/ymax/text()')[0])
+#
+# xmin = (xmin/width)*224
+# xmax = (xmax/width)*224
+# ymin = (ymin/height)*224
+# ymax = (ymax/height)*224
+#
+# plt.imshow(img)
+# rect = Rectangle((xmin,ymin),(xmax-xmin),(ymax-ymin),fill=False,color='red')
+# ax = plt.gca()
+# # 获取当前图像
+# ax.axes.add_patch(rect)
+# plt.show()
+
+images = glob.glob('./data_set/location/images/*.jpg')
+xmls = glob.glob('./data_set/location/annotations/xmls/*.xml')
+# 两个长度不一样 一部分做训练集 一部分做测试集
+names = [x.split('\\')[-1].split('.xml')[0] for x in xmls]
+imgs_train = [img for img in images if(img.split('\\')[-1].split('.jpg')[0]) in names]
+imgs_test = [img for img in images if(img.split('\\')[-1].split('.jpg')[0]) not in names]
+
+imgs_train.sort(key=lambda x:x.split('\\')[-1].split('.jpg')[0])
+xmls.sort(key=lambda x:x.split('\\')[-1].split('.xml')[0])
+
+def to_labels(path):
+    xml = open('{}'.format(path)).read()
+    select = etree.HTML(xml)
+    width = int(select.xpath('//size/width/text()')[0])
+    height = int(select.xpath('//size/height/text()')[0])
+    xmin = int(select.xpath('//bndbox/xmin/text()')[0])
+    xmax = int(select.xpath('//bndbox/xmax/text()')[0])
+    ymin = int(select.xpath('//bndbox/ymin/text()')[0])
+    ymax = int(select.xpath('//bndbox/ymax/text()')[0])
+    return [xmin/width,ymin/height,xmax/width,ymax/height]
+
+labels = [to_labels(path) for path in xmls]
+out1,out2,out3,out4 = list(zip(*labels))
+# zip的反操作
+out1= np.array(out1)
+out2= np.array(out2)
+out3= np.array(out3)
+out4= np.array(out4)
+labels_datasets = tf.data.Dataset.from_tensor_slices((out1,out2,out3,out4))
+
+def load_image(path):
+    img = tf.io.read_file(path)
+    img = tf.image.decode_jpeg(img,channels=3)
+    img = tf.image.resize(img,[224,224])
+    img = img/127.5-1
+    return img
+
+image_datasets = tf.data.Dataset.from_tensor_slices(imgs_train)
+image_datasets = image_datasets.map(load_image)
+dataset = tf.data.Dataset.zip((image_datasets,labels_datasets))
+dataset = dataset.repeat().shuffle(len(imgs_train)).batch(32)
+
+for img , label in dataset.take(1):
+    plt.imshow(tf.keras.preprocessing.image.array_to_img(img[1]))
+    out1 , out2, out3, out4 = label
+    xmin, ymin, xmax, ymax = out1[0].numpy()*224, out2[0].numpy()*224, out3[0].numpy()*224, out4[0].numpy()*224
+    rect = Rectangle((xmin,ymin),(xmax-xmin),(ymax-ymin),fill=False,color='red')
+    ax = plt.gca()
+    ax.axes.add_patch(rect)
+    plt.show()
+
+xception = tf.keras.applications.Xception(weights='imagenet',
+                                          include_top = False,
+                                          input_shape = (224,224,3))
+inputs = tf.keras.layers.Input(shape=(224,224,3))
+
+x = xception(inputs)
+x = tf.keras.layers.GlobalAveragePooling2D()(x)
+x = tf.keras.layers.Dense(2048,activation='relu')(x)
+x = tf.keras.layers.Dense(256,activation='relu')(x)
+
+out1 = tf.keras.layers.Dense(1)(x)
+out2 = tf.keras.layers.Dense(1)(x)
+out3 = tf.keras.layers.Dense(1)(x)
+out4 = tf.keras.layers.Dense(1)(x)
+
+prediction = [out1,out2,out3,out4]
+
+model = tf.keras.models.Model(inputs=inputs,outputs=prediction)
+
+model.compile(
+    tf.keras.optimizers.Adam(learning_rate=0.0001),
+    loss='mse',#回归问题的loss
+    metrics=['mae']
+)
+
+EPOCHS = 50
+#数据划分
+test_count = int(len(images)*0.2)
+train_count = len(images) - test_count
+dataset_train = dataset.skip(test_count)
+dataset_test = dataset.take(test_count)
+
+BATCH_SIZE = 8
+BUFFER_SIZE = 300
+STEPS_PEr_EPOCH = train_count//BATCH_SIZE
+VALIDATION_STEPS = test_count//BATCH_SIZE
+
+history = model.fit(
+    dataset_train,
+    epochs=EPOCHS,
+    steps_per_epoch=STEPS_PEr_EPOCH,
+    validation_steps=VALIDATION_STEPS,
+    validation_data=dataset_test
+)
+
+loss = history.history['loss']
+val_loss = history.history['val_loss']
+
+epochs = range(EPOCHS)
+
+plt.figure()
+plt.plot(epochs,loss,'r',label='Training loss')
+plt.plot(epochs,val_loss,'bo',label='Validation loss')
+plt.title('Training and Validation Loss')
+plt.xlabel('Epoch')
+plt.ylabel('Loss Value')
+plt.legend()
+plt.show()
+
+model.save('location_weight.h5')
+#保存模型
+
+new_model = tf.keras.models.load_model('location_weight.h5')
+#加载模型
+
+plt.figure(figsize=(8,24))
+#创建画布
+for img,_ in dataset_test.take(1):
+    out1,out2,out3,out4 = new_model.predict(img)
+    for i in range(3):
+        plt.subplot(3,1,i+1)
+        # 画子图 三行一列
+        plt.imshow(tf.keras.preprocessing.image.array_to_img(img[i]))
+        xmin, ymin, xmax, ymax = out1[i]*224, out2[i]*224, out3[i]*224, out4[i]*224
+        rect = Rectangle((xmin, ymin), (xmax - xmin), (ymax - ymin), fill=False, color='red')
+        ax = plt.gca()
+        ax.axes.add_patch(rect)
+        plt.show()

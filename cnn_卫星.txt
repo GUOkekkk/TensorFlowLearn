@@ -1,0 +1,144 @@
+import tensorflow as tf
+import matplotlib.pyplot as plt
+import numpy as np
+import pathlib
+import random
+import IPython.display as display
+
+#二分类问题
+#pathlib面向对象的路径工具
+
+data_dir = 'E:/pythonwork/data_set/2_class'
+data_root = pathlib.Path(data_dir)
+
+#for i in data_root.iterdir():
+#    print(i)
+#对路径进行迭代
+
+all_image_path = list(data_root.glob('*/*'))
+#获取文件所有路径 正则表达式 占位符 所有目录里面所有文件
+
+#print(len(all_image_path))
+#共有多少张图片
+#all_image_path[:3] 查看前三张
+#all_image_path[-3:] 查看后三张
+
+all_image_path = [str(path) for path in all_image_path] #列表形式储存
+random.shuffle(all_image_path)#对数据乱序处理
+image_count = len(all_image_path)
+
+label_names =sorted(item.name for item in data_root.glob('*/'))
+#提取标签名字 glob找出目录 name取出名字
+
+label_to_index = dict((name,index) for index , name in enumerate(label_names))
+#对标签编码
+
+all_image_label = [label_to_index[pathlib.Path(p).parent.name] for p in all_image_path]
+
+#得到图片路径和标签
+
+index_to_label = dict((v,k )for k,v in label_to_index.items())
+
+# for n in  range(3):
+#     image_index  = random.choice(range(len(all_image_path)))
+#     display.display(display.Image(all_image_path[image_index]))
+#     print(index_to_label[all_image_label[image_index]])
+#     print()
+
+#显示图片 用交互式的好一点
+
+#image_raw = tf.io.read_file(all_image_path)
+#读取出来是二进制
+
+#image_tensor = tf.image.decode_image(image_raw)
+#解码变成tensor数据 [256,256,3] 通道数位3
+
+#image_tensor = tf.cast(image_tensor,tf.float32)
+#image_tensor = image_tensor/255
+#数据标准化
+
+def load_preprosess_image(image_path):
+    image_raw = tf.io.read_file(image_path)
+    image_tensor = tf.image.decode_jpeg(image_raw,channels=3)
+    #确定好通道数
+    image_tensor = tf.image.resize(image_tensor,[256,256])
+    #裁剪图片 会变形但不影响
+    image_tensor = tf.cast(image_tensor,tf.float32)
+    img= image_tensor/255
+    return img
+#包装成函数 输出的是矩阵 但是可以画成图像
+#验证
+# image_path = all_image_path[100]
+# plt.imshow(load_preprosess_image(image_path))
+# plt.show()
+
+path_ds = tf.data.Dataset.from_tensor_slices(all_image_path)
+image_dataset = path_ds.map(load_preprosess_image)
+label_dataset = tf.data.Dataset.from_tensor_slices(all_image_label)
+
+dataset = tf.data.Dataset.zip((image_dataset,label_dataset))
+#用元组的形式放进去
+
+test_count = int(image_count*0.2)
+train_count = image_count - test_count
+
+train_dataset = dataset.skip(test_count)
+#skip跳过？条数据
+test_dataset = dataset.take(test_count)
+
+BATCH_SIZE = 32
+
+train_dataset = train_dataset.shuffle(buffer_size=train_count).repeat().batch(BATCH_SIZE)
+#buffer_size 在什么范围进行乱序
+
+test_dataset = test_dataset.repeat().batch(BATCH_SIZE)
+#测试数据不用乱序
+
+model = tf.keras.Sequential()
+model.add(
+    tf.keras.layers.Conv2D(64,#卷积核个数 即通道数变化
+                           (3,3),#卷积核大小
+                           input_shape=(256,256,3),
+                          activation='relu'
+                           )#默认使用vaild的padding输出的数据图片变小一点a-b+1 如果使用same则大小不变
+        )
+model.add(tf.keras.layers.Conv2D(64,(3,3),activation='relu'))
+model.add(tf.keras.layers.MaxPooling2D())#默认2*2
+#model.add(tf.keras.layers.Dropout(0.5)) 效果较好 不需要抑制过拟合
+
+model.add(tf.keras.layers.Conv2D(128,(3,3),activation='relu'))#2的n次方递增拟合能力强
+model.add(tf.keras.layers.Conv2D(128,(3,3),activation='relu'))
+model.add(tf.keras.layers.MaxPooling2D())
+#model.add(tf.keras.layers.Dropout(0.5))
+
+model.add(tf.keras.layers.Conv2D(256,(3,3),activation='relu'))
+model.add(tf.keras.layers.Conv2D(256,(3,3),activation='relu'))
+model.add(tf.keras.layers.MaxPooling2D())
+#model.add(tf.keras.layers.Dropout(0.5))
+
+model.add(tf.keras.layers.Conv2D(512,(3,3),activation='relu'))
+model.add(tf.keras.layers.Conv2D(512,(3,3),activation='relu'))
+model.add(tf.keras.layers.MaxPooling2D())
+#model.add(tf.keras.layers.Dropout(0.5))
+
+model.add(tf.keras.layers.Conv2D(1024,(3,3),activation='relu'))
+model.add(tf.keras.layers.GlobalAveragePooling2D())
+#全局平均池化全连接 所有维度上做一个平均 得到一个二维的数据 个数 通道数
+#就好像整个图片取了一个平均
+#model.add(tf.keras.layers.Flatten()) 扁平化全连接
+model.add(tf.keras.layers.Dense(1024,activation='relu'))
+model.add(tf.keras.layers.Dense(256,activation='relu'))
+model.add(tf.keras.layers.Dense(1,activation='softmax'))
+
+model.compile(optimizer='adam',
+              loss='binary_crossentropy',
+              metrics=['acc'])
+
+steps_per_epoch = train_count//BATCH_SIZE
+validation_steps = test_count//BATCH_SIZE
+
+history = model.fit(train_dataset,
+                    epochs=30,
+                    steps_per_epoch=steps_per_epoch,
+                    validation_data=test_dataset,
+                    validation_steps=validation_steps)

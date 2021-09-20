@@ -1,0 +1,58 @@
+import tensorflow as tf
+import numpy as np
+import pandas as pd
+import re
+
+data = pd.read_csv('./data_set/twitter/Tweets.csv')
+data = data[['airline_sentiment', 'text']]
+# print(data.airline_sentiment.unique()) 查看分类值
+# print(data.airline_sentiment.value_counts()) 数量
+
+data_p = data[data.airline_sentiment == 'positive']
+data_n = data[data.airline_sentiment == 'negative']
+data_n = data_n.iloc[:len(data_p)]
+# 取出一样多的数据集
+data = pd.concat([data_n, data_p])
+# 合并
+# print(data.loc[[82]].text) 提取编号某行 iloc是第几行
+data = data.sample(len(data))
+data['review'] = (data.airline_sentiment == 'positive').astype('int')
+# 对布尔值进行转换为int
+del data['airline_sentiment']
+# 把文字变成数字序列 把文本向量化
+token = re.compile('[A-Za-z]+|[!?,.()]')
+# 去掉特殊字符
+def reg_text(text):
+    new_text = token.findall(text)
+    new_text = [word.lower() for word in new_text]
+    return new_text
+
+data.text = data.text.apply(reg_text)
+word_set = set()
+# 用集合来储存 则没有重复元素
+for text in data.text:
+    for word in text:
+        word_set.add(word)
+word_list = list(word_set)
+word_index = dict((word, word_list.index(word)+1) for word in word_list)
+data_ok = data.text.apply(lambda x:[word_index.get(word, 0) for word in x])
+# lambda指每一个text 用的列表推导式  这里data_ok只有一个column
+maxlen = max(len(x) for x in data_ok)
+maxword = len(word_set)+1
+# 要把评论都填充到最长的评论 用0填充 填充在了最前面
+data_ok = tf.keras.preprocessing.sequence.pad_sequences(data_ok.values, maxlen=maxlen)
+model = tf.keras.Sequential()
+# Embeding：把文本映射到一个密集向量
+model.add(tf.keras.layers.Embedding(maxword, 50, input_length=maxlen))
+model.add(tf.keras.layers.LSTM(64))
+model.add(tf.keras.layers.Dense(1, activation='sigmoid'))
+
+model.compile(
+    optimizer='adam',
+    loss=tf.keras.losses.binary_crossentropy,
+    metrics=['acc']
+)
+model.fit(data_ok,data.review.values,
+          epochs=10, batch_size=128,
+          validation_split=0.2)
+# 切分多少作为测试数据

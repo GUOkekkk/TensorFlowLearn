@@ -1,0 +1,50 @@
+import tensorflow as tf
+import os
+import datetime
+
+(train_image,train_label),(test_image,test_label) = tf.keras.datasets.fashion_mnist.load_data()
+
+
+train_image = tf.expand_dims(train_image,-1)
+test_image = tf.expand_dims(test_image,-1)
+
+train_image = tf.cast(train_image/255,tf.float32)
+test_image = tf.cast(test_image/255,tf.float32)
+train_label =tf.cast(train_label,tf.int64)
+test_label = tf.cast(test_label,tf.int64)
+
+dataset = tf.data.Dataset.from_tensor_slices((train_image,train_label))
+test_dataset = tf.data.Dataset.from_tensor_slices((test_image,test_label))
+
+dataset = dataset.repeat().shuffle(60000).batch(128)
+#自定义训练要填一个repeat的参数
+test_dataset =test_dataset.repeat().batch(128)
+
+model = tf.keras.Sequential(
+    [
+        tf.keras.layers.Conv2D(16,[3,3],activation='relu',input_shape=(None,None,1)),
+        tf.keras.layers.Conv2D(32,[3,3],activation='relu'),
+        tf.keras.layers.GlobalMaxPool2D(),
+        tf.keras.layers.Dense(10,activation='softmax')
+    ]
+)
+
+model.compile(
+    optimizer='adam',
+    loss='sparse_categorical_crossentropy',
+    metrics=['accuracy']
+)
+log_dir = os.path.join('logs',datetime.datetime.now().strftime('%Y%m%d-%H%M%S'))
+#添加时间戳
+
+tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir,histogram_freq=1)
+#histogram_freq记录直方图的频率
+
+model.fit(
+    dataset,
+    epochs=5,
+    steps_per_epoch=60000//128,
+    validation_data=test_dataset,
+    validation_steps=10000//128,
+    callbacks=[tensorboard_callback]
+)
